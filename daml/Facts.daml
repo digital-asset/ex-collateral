@@ -1,0 +1,136 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module Facts where
+
+import RefData
+
+{- ------------- Price Result -------------
+  An agreed fact on the price of an asset
+-}
+template PriceResult
+  with
+    partyA  : Party
+    partyB  : Party
+    ruleId  : Text
+
+    assetProvider : Party
+    assetSymbol   : Text
+
+    refDataIssuer  : Party
+    refDataVersion : Int
+
+    price  : Decimal
+  where
+    signatory partyA
+    signatory partyB
+
+    let
+      getAndCheckPriceRefData : (ContractId PriceRefData) -> Update Bool
+      getAndCheckPriceRefData refDataCid = do
+        refData <- fetch refDataCid
+        assertMsg "Reference data does not match result."
+          (  refData.issuer == refDataIssuer
+          && refData.assetProvider == assetProvider
+          && refData.assetSymbol == assetSymbol )
+        return (refData.version == refDataVersion)
+
+    controller partyA can
+      nonconsuming CheckA
+        : Bool
+        with refDataCid: ContractId PriceRefData
+        do getAndCheckPriceRefData refDataCid
+
+      ArchiveA
+        : ()
+        with refDataCid: ContractId PriceRefData
+        do
+          checkResults <- getAndCheckPriceRefData refDataCid
+          assertMsg "Result is still valid. Cannot archive." (not checkResults)
+
+    controller partyB can
+      nonconsuming CheckB
+        : Bool
+        with refDataCid: ContractId PriceRefData
+        do getAndCheckPriceRefData refDataCid
+
+      ArchiveB
+        : ()
+        with refDataCid: ContractId PriceRefData
+        do
+          checkResults <- getAndCheckPriceRefData refDataCid
+          assertMsg "Result is still valid. Cannot archive." (not checkResults)
+
+checkPriceResult : (Party) -> (ContractId PriceResult) -> (ContractId PriceRefData) -> Update Bool
+checkPriceResult party priceResultCid refDataCid = do
+    pr <- do         fetch priceResultCid
+    if party == pr.partyA then
+      do         exercise priceResultCid CheckA with refDataCid
+    else
+      do         exercise priceResultCid CheckB with refDataCid
+
+
+{- ------------- Rule Result -------------
+  An agreed fact on the evaluation result of a rule
+-}
+template RuleResult
+  with
+    partyA  : Party
+    partyB  : Party
+    ruleId  : Text
+
+    assetProvider : Party
+    assetSymbol   : Text
+
+    refDataIssuer  : Party
+    refDataVersion : Int
+
+    result  : Bool
+  where
+    signatory partyA
+    signatory partyB
+
+    let
+      getAndCheckAssetRefData : (ContractId AssetRefData) -> Update Bool
+      getAndCheckAssetRefData refDataCid = do
+        refData <- fetch refDataCid
+        assertMsg  "Reference data does not match result."
+          (  refData.issuer == refDataIssuer
+          && refData.assetProvider == assetProvider
+          && refData.assetSymbol == assetSymbol )
+        return (refData.version == refDataVersion)
+
+    controller partyA can
+      nonconsuming RR_CheckA
+        : Bool
+        with refDataCid: ContractId AssetRefData
+        do getAndCheckAssetRefData refDataCid
+
+      RR_ArchiveA
+        : ()
+        with refDataCid: ContractId AssetRefData
+        do
+          checkResults <- getAndCheckAssetRefData refDataCid
+          assertMsg "Result is still valid. Cannot archive." (not checkResults)
+
+    controller partyB can
+      nonconsuming RR_CheckB
+        : Bool
+        with refDataCid: ContractId AssetRefData
+        do getAndCheckAssetRefData refDataCid
+
+      RR_ArchiveB
+        : ()
+        with refDataCid: ContractId AssetRefData
+        do
+          checkResults <- getAndCheckAssetRefData refDataCid
+          assertMsg "Result is still valid. Cannot archive." (not checkResults)
+
+checkRuleResult : (Party) -> (ContractId RuleResult) -> (ContractId AssetRefData) -> Update Bool
+checkRuleResult party ruleResultCid refDataCid = do
+    rr <- do         fetch ruleResultCid
+    if party == rr.partyA then
+      do         exercise ruleResultCid RR_CheckA with refDataCid
+    else
+      do         exercise ruleResultCid RR_CheckB with refDataCid

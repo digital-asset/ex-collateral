@@ -1,0 +1,19 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+
+daml 1.2
+module Account where
+
+{- ------------- Account -------------
+  A contract representing an account on the ledger. It also provides a
+  link to the off ledger account.
+-}
+template Account
+  with
+    provider  : Party
+    owner     : Party
+    accountId : Text
+  where
+    signatory provider
+    signatory owner

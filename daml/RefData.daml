@@ -1,0 +1,59 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module RefData where
+
+data AssetRating = AAA | AA | A | B | C deriving (Eq, Show)
+data AssetType = Bond | Equity deriving (Eq, Show)
+
+{- ------------- Price Reference Data -------------
+  A piece of reference data giving the price of an asset
+-}
+template PriceRefData
+  with
+    issuer        : Party
+    assetProvider : Party
+    assetSymbol   : Text
+    version       : Int
+    price         : Decimal
+    obs           : Party
+  where
+    signatory issuer
+    observer obs
+
+    controller issuer can
+      SetPriceRefData : ContractId PriceRefData
+        with
+          newPrice : Decimal
+        do
+          create this with
+            price = newPrice
+            version = version + 1
+
+{- ------------- Asset Reference Data -------------
+  A piece of reference data giving the type and rating of an asset
+-}
+template AssetRefData
+  with
+    issuer        : Party
+    assetProvider : Party
+    assetSymbol   : Text
+    version       : Int
+    assetType     : AssetType
+    assetRating   : AssetRating
+    obs           : Party
+  where
+    signatory issuer
+    observer obs
+
+    controller issuer can
+      SetAssetRefData : ContractId AssetRefData
+        with
+          newType   : AssetType
+          newRating : AssetRating
+        do
+          create this with
+            assetType = newType
+            assetRating = newRating
+            version = version + 1

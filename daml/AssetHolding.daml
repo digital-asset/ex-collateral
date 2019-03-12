@@ -1,0 +1,65 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module AssetHolding where
+
+import Account
+import Asset
+
+{- ------------- Asset Owner Invitation -------------
+  A proposal contract for setting up the relationship between asset issuer and owner.
+-}
+template AssetOwnerInvitation
+  with
+    provider : Party
+    owner    : Party
+  where
+    signatory provider
+
+    controller owner can
+      AOI_Accept
+        : ContractId AssetOwner
+        do create AssetOwner with provider; owner
+
+      AOI_Reject
+        : ()
+        do return ()
+
+    controller provider can
+      AOI_Cancel
+        : ()
+        do return ()
+
+{- ------------- Asset Owner -------------
+  A contract representing that owner holds assets at issuer
+-}
+template AssetOwner
+  with
+    provider : Party
+    owner    : Party
+  where
+    signatory provider
+    signatory owner
+
+    controller provider can
+
+      nonconsuming IssueAccount
+        : ContractId Account
+        with accountId : Text
+        do create Account with provider; owner; accountId
+
+      nonconsuming IssueAsset
+        : ContractId Asset
+        with
+          accountCid  : ContractId Account
+          symbol      : Text
+          quantity    : Int
+        do
+          account <- fetch accountCid
+          assertMsg
+            ("Asset issuance failed. Please make sure issuer and owner on account "
+            <> " match those specified on the Assetowner contract.")
+            (account.provider == provider && account.owner == owner)
+          create Asset with
+            provider; owner; accountId = account.accountId; symbol; quantity

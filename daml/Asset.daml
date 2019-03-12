@@ -1,0 +1,139 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module Asset where
+
+import Account
+
+{- ------------- Asset -------------
+   A generic asset holding contract
+-}
+template Asset
+  with
+    provider  : Party
+    owner     : Party
+    accountId : Text
+    symbol    : Text
+    quantity  : Int
+  where
+    signatory provider
+    signatory owner
+
+    ensure quantity > 0
+
+    controller owner can
+      Split
+        : (ContractId Asset, Optional (ContractId Asset))
+        with splitQuantity: Int
+        do
+          splitCid <- create this with quantity = splitQuantity
+          restCid <-
+            if quantity == splitQuantity
+            then return None
+            else do
+              cid <- create this with quantity = quantity - splitQuantity
+              return (Some cid)
+          return (splitCid, restCid)
+
+      Merge
+        : ContractId Asset
+        with otherCid: ContractId Asset
+        do
+          other <- fetch otherCid
+          assertMsg "Merge failed. Assets do not match." (this == other with quantity)
+          do         exercise otherCid Archives
+          create this with quantity = quantity + other.quantity
+
+      RequestTransfer
+        : ContractId TransferRequest
+        with
+          newOwner : Party
+        do create TransferRequest with provider; owner; accountId; symbol; quantity; newOwner
+
+      Settle
+        : ContractId Settlement
+        do create Settlement with provider; owner; accountId; symbol; quantity
+
+      Archives
+        : ()
+        do return ()
+
+{- ------------- TransferRequest -------------
+  A request to transfer an asset to a new owner
+-}
+template TransferRequest
+  with
+    provider  : Party
+    owner     : Party
+    accountId : Text
+    symbol    : Text
+    quantity  : Int
+
+    newOwner  : Party
+  where
+    signatory provider
+    signatory owner
+
+    controller newOwner can
+      Accept
+        : ContractId Asset
+        with accountCid : ContractId Account
+        do
+          account <- fetch accountCid
+          create Asset
+            with
+              provider
+              owner = newOwner
+              accountId = account.accountId
+              symbol
+              quantity
+
+      Reject
+        : ContractId Asset
+        do create Asset with provider; owner; accountId; symbol; quantity
+
+    controller owner can
+      Cancel
+        : ContractId Asset
+        do create Asset with provider; owner; accountId; symbol; quantity
+
+{- ------------- Settlement -------------
+  An agreement representing the settlement of an asset from on-ledger to
+  off-ledger account
+-}
+template Settlement
+  with
+    provider  : Party
+    owner     : Party
+    accountId : Text
+    symbol    : Text
+    quantity  : Int
+  where
+    signatory provider
+    signatory owner
+
+    agreement
+      ((show provider) <> " agrees to credit " <> (show quantity) <>
+      " assets with symbol " <> (show symbol) <> " to account " <>
+      (show accountId) <> " owned by " <> (show owner) <> ".")
+
+    controller provider can
+      Confirm
+        : ()
+        do return ()
+
+-- Utility Type to specify an asset and quantity.
+data AssetSpec = AssetSpec with
+  assetProvider : Party
+  assetSymbol : Text
+  quantity : Int
+    deriving (Eq, Show)
+
+-- Utility to turn an asset into an AssetSpec
+assetToSpec : (Asset) -> AssetSpec
+assetToSpec asset = AssetSpec
+  with
+    assetProvider = asset.provider
+    assetSymbol = asset.symbol
+    quantity = asset.quantity

@@ -1,0 +1,70 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module CollateralAgreementState where
+
+import DA.List
+
+import Asset
+
+{- ------------- Collateral Agreement State -------------
+  The state of a collateral agreement. Keeps track of the pledged collateral
+-}
+template CollateralAgreementState
+  with
+    borrower : Party
+    lender   : Party
+    caId     : Text
+
+    collateralSchedule : [AssetSpec]
+  where
+    signatory borrower
+    signatory lender
+
+    let
+      addToSchedule : [AssetSpec] -> (AssetSpec) -> Update [AssetSpec]
+      addToSchedule oldSchedule assetSpec = do
+        let
+          mIdx = findIndex (\   (a: AssetSpec) ->
+            a.assetProvider == assetSpec.assetProvider
+            && a.assetSymbol == assetSpec.assetSymbol)
+            oldSchedule
+
+        case mIdx of
+          None -> do
+            assertMsg
+              "Schedule update failed. Quantities have to be positive."
+              (assetSpec.quantity >= 0)
+            return (if assetSpec.quantity > 0 then ((::) assetSpec collateralSchedule)
+              else collateralSchedule)
+          Some i  -> do
+            let
+              s = splitAt i collateralSchedule
+              oldSpec = head s._2
+              newSpec = assetSpec with quantity = assetSpec.quantity + oldSpec.quantity
+              insert = if newSpec.quantity > 0 then [newSpec] else []
+
+            assertMsg
+              "Schedule update failed. Quantities have to be positive."
+              (newSpec.quantity >= 0)
+
+            return (fst s ++ insert ++ tail s._2)
+
+
+    controller borrower can
+      DeductFromSchedule
+        : ContractId CollateralAgreementState
+        with assetSpec : AssetSpec
+        do
+          newSchedule <- addToSchedule collateralSchedule
+            (assetSpec with quantity = 0 - assetSpec.quantity)
+          create this  with collateralSchedule = newSchedule
+
+    controller lender can
+      AddToSchedule
+        : ContractId CollateralAgreementState
+        with assetSpec : AssetSpec
+        do
+          newSchedule <- addToSchedule collateralSchedule assetSpec
+          create this  with collateralSchedule = newSchedule

@@ -1,0 +1,110 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module Eligibility where
+
+import Asset
+import RefData
+
+data EligibilityCriterion = EligibilityCriterion with
+  ruleId : Text
+  haircut : Decimal
+    deriving (Eq, Show)
+
+{- ------------- Collateral Agreement -------------
+  A fact establishing an asset's eligibility under a collateral agreement.
+  If applicableCriteria is empty, then applicableHaircut is 1.0 and the asset
+  is not eligible.
+-}
+template EligibilityProof
+  with
+    partyA : Party
+    partyB : Party
+    caId   : Text
+
+    assetProvider : Party
+    assetSymbol : Text
+
+    refDataIssuers  : [Party]
+    refDataVersions : [Int]
+
+    applicableCriteria : [EligibilityCriterion]
+
+    applicableHaircut : Decimal
+  where
+    signatory partyA
+    signatory partyB
+
+    let
+      getAndCheckRefData : [ContractId AssetRefData] -> Update [Bool]
+      getAndCheckRefData refDataCids = do
+        assertMsg
+          "Check failed. Incorrect number of AssetRefData contracts."
+          (length refDataCids == length refDataIssuers)
+        forA (zip3 refDataCids refDataIssuers refDataVersions)
+          (\t -> do
+            refData <- fetch t._1
+            assertMsg "Check failed. Incorrect issuer on ref data." (refData.issuer == t._2)
+            assertMsg
+              "Check failed. Incorrect asset on ref data."
+              (refData.assetProvider == assetProvider
+              && refData.assetSymbol == assetSymbol)
+            return (refData.version == t._3)
+           )
+
+    controller partyA can
+      nonconsuming EP_CheckA
+        : Bool
+        with refDataCids: [ContractId AssetRefData]
+        do
+          checkResults <- getAndCheckRefData refDataCids
+          return (all id checkResults)
+
+      EP_ArchiveA
+        : ()
+        with refDataCids: [ContractId AssetRefData]
+        do
+          checkResults <- getAndCheckRefData refDataCids
+          assertMsg "Proof is still valid. Can't archive." (not (all id checkResults))
+
+    controller partyB can
+      nonconsuming EP_CheckB
+        : Bool
+        with refDataCids: [ContractId AssetRefData]
+        do
+          checkResults <- getAndCheckRefData refDataCids
+          return (all id checkResults)
+
+      EP_ArchiveB
+        : ()
+        with refDataCids: [ContractId AssetRefData]
+        do
+          checkResults <- getAndCheckRefData refDataCids
+          assertMsg "Proof is still valid. Can't archive." (not (all id checkResults))
+
+checkEligibilityProof : (Party) -> (ContractId EligibilityProof) -> [ContractId AssetRefData] -> Update Bool
+checkEligibilityProof party eligibilityProofCid refDataCids = do
+    e <- do         fetch eligibilityProofCid
+    if party == e.partyA then
+      do exercise eligibilityProofCid EP_CheckA with refDataCids
+    else
+      do exercise eligibilityProofCid EP_CheckB with refDataCids
+
+-- Function is only included here for use in the documentation.
+-- It is not part of the model.
+aEquity : (ContractId Asset) -> (ContractId AssetRefData) -> Party -> Update Bool
+aEquity assetCid refDataCid issuer = do
+    asset   <- fetch assetCid
+    refData <- fetch refDataCid
+    assert (refData.issuer == issuer)
+    assert (refData.assetProvider == asset.provider)
+    assert (refData.assetSymbol == asset.symbol)
+    return (
+      refData.assetType == Equity
+      && (
+        refData.assetRating == AAA
+        || refData.assetRating == AA
+        || refData.assetRating == A
+       )
+     )

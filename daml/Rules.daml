@@ -1,0 +1,250 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module Rules where
+
+import RefData
+import Facts
+
+{- ------------- RefData Price Rule -------------
+  A simple rule to agree price based on one issuers reference data
+-}
+template RefDataPriceRule
+  with
+    partyA : Party
+    partyB : Party
+    ruleId : Text
+
+    refDataIssuer : Party
+  where
+    signatory partyA
+    signatory partyB
+
+    controller partyA can
+      nonconsuming RDPR_EvaluateA
+        : ContractId PriceResult
+        with
+          refDataCid : ContractId PriceRefData
+        do
+          refData <- fetch refDataCid
+
+          assertMsg
+            "Evauation failed. Incorrect issuer on RefData."
+            (refDataIssuer == refData.issuer)
+
+          create PriceResult
+            with
+              partyA; partyB; ruleId
+              assetProvider = refData.assetProvider
+              assetSymbol = refData.assetSymbol
+              refDataIssuer = refData.issuer
+              refDataVersion = refData.version
+              price = refData.price
+
+    controller partyB can
+      nonconsuming RDPR_EvaluateB
+        : ContractId PriceResult
+        with
+          refDataCid : ContractId PriceRefData
+        do
+          refData <- fetch refDataCid
+
+          assertMsg
+            "Evauation failed. Incorrect issuer on RefData."
+            (refDataIssuer == refData.issuer)
+
+          create PriceResult
+            with
+              partyA; partyB; ruleId
+              assetProvider = refData.assetProvider
+              assetSymbol = refData.assetSymbol
+              refDataIssuer = refData.issuer
+              refDataVersion = refData.version
+              price = refData.price
+
+{- ------------- RefData Price Rule Proposal -------------
+  A workflow contract to establish a price rule
+-}
+template RefDataPriceRuleProposal
+  with
+    partyA : Party
+    partyB : Party
+    ruleId : Text
+
+    refDataIssuer : Party
+  where
+    signatory partyB
+
+    controller partyA can
+      RDPRP_Accept
+        : ContractId RefDataPriceRule
+        do create RefDataPriceRule with partyA; partyB; ruleId; refDataIssuer
+
+
+
+{- ------------- AAA Bond Rule -------------
+  A simple rule to agree that an asset is a AAA bond
+-}
+template AAABondRule
+  with
+    partyA : Party
+    partyB : Party
+    ruleId : Text
+
+    refDataIssuer : Party
+  where
+    signatory partyA
+    signatory partyB
+
+    controller partyA can
+      nonconsuming AAABR_EvaluateA
+        : ContractId RuleResult
+        with
+          refDataCid : ContractId AssetRefData
+        do
+          refData <- fetch refDataCid
+
+          assertMsg
+            "Evauation failed. Incorrect issuer on RefData."
+            (refDataIssuer == refData.issuer)
+
+          create RuleResult
+            with
+              partyA; partyB; ruleId
+              assetProvider = refData.assetProvider
+              assetSymbol = refData.assetSymbol
+              refDataIssuer = refData.issuer
+              refDataVersion = refData.version
+              result = (
+                refData.assetRating == AAA
+                && refData.assetType == Bond
+               )
+
+    controller partyB can
+      nonconsuming AAABR_EvaluateB
+        : ContractId RuleResult
+        with
+          refDataCid : ContractId AssetRefData
+        do
+          refData <- fetch refDataCid
+
+          assertMsg
+            "Evauation failed. Incorrect issuer on RefData."
+            (refDataIssuer == refData.issuer)
+
+          create RuleResult
+            with
+              partyA; partyB; ruleId
+              assetProvider = refData.assetProvider
+              assetSymbol = refData.assetSymbol
+              refDataIssuer = refData.issuer
+              refDataVersion = refData.version
+              result = (refData.assetRating == AAA && refData.assetType == Bond)
+
+{- ------------- AAA Bond Rule Proposal -------------
+  A workflow contract to establish a AAA Bond rule
+-}
+template AAABondRuleProposal
+  with
+    partyA : Party
+    partyB : Party
+    ruleId : Text
+
+    refDataIssuer : Party
+  where
+    signatory partyB
+
+    controller partyA can
+      AAABRP_Accept
+        : ContractId AAABondRule
+        do create AAABondRule with partyA; partyB; ruleId; refDataIssuer
+
+
+
+{- ------------- A Equity Rule -------------
+  A simple rule to agree that an asset is a AAA bond
+-}
+template AEquityRule
+  with
+    partyA : Party
+    partyB : Party
+    ruleId : Text
+
+    refDataIssuer : Party
+  where
+    signatory partyA
+    signatory partyB
+
+    controller partyA can
+      nonconsuming AER_EvaluateA
+        : ContractId RuleResult
+        with
+          refDataCid : ContractId AssetRefData
+        do
+          refData <- fetch refDataCid
+
+          assertMsg
+            ("Evauation failed." <>
+             " Incorrect issuer on RefData.")
+            (refDataIssuer == refData.issuer)
+
+          create RuleResult
+            with
+              partyA; partyB; ruleId
+              assetProvider = refData.assetProvider
+              assetSymbol = refData.assetSymbol
+              refDataIssuer = refData.issuer
+              refDataVersion = refData.version
+              result = (
+                refData.assetType == Equity
+                && (
+                     refData.assetRating == AAA
+                  || refData.assetRating == AA
+                  || refData.assetRating == A
+                 ))
+
+    controller partyB can
+      nonconsuming AER_EvaluateB
+        : ContractId RuleResult
+        with
+          refDataCid : ContractId AssetRefData
+        do
+          refData <- fetch refDataCid
+
+          assertMsg
+            "Evauation failed. Incorrect issuer on RefData."
+            (refDataIssuer == refData.issuer)
+
+          create RuleResult
+            with
+              partyA; partyB; ruleId
+              assetProvider = refData.assetProvider
+              assetSymbol = refData.assetSymbol
+              refDataIssuer = refData.issuer
+              refDataVersion = refData.version
+              result = (
+                refData.assetType == Equity
+                && (
+                     refData.assetRating == AAA
+                  || refData.assetRating == AA
+                  || refData.assetRating == A
+                 ))
+
+{- ------------- AAA Bond Rule Proposal -------------
+  A workflow contract to establish a AAA Bond rule
+-}
+template AEquityRuleProposal
+  with
+    partyA : Party
+    partyB : Party
+    ruleId : Text
+
+    refDataIssuer : Party
+  where
+    signatory partyB
+
+    controller partyA can
+      AERP_Accept
+        : ContractId AEquityRule
+        do create AEquityRule with partyA; partyB; ruleId; refDataIssuer

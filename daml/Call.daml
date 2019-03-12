@@ -1,0 +1,235 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module Call where
+
+import Account
+import Asset
+import RefData
+import Facts
+import Eligibility
+import CollateralAgreementState
+
+data CallStatus = Outstanding | Agreed | Settled | Disputed
+  deriving (Eq, Show)
+data CallSubject
+  = Delivery with
+    amount : Decimal
+    deliveryAccountCid : ContractId Account
+  | Return with
+    assetSpec : AssetSpec
+    returnAccountCid: ContractId Account
+  | Substitution with
+    returnAssetSpec  : AssetSpec
+    returnAccountCid : ContractId Account
+    deliveryAssetCid : ContractId Asset
+  deriving (Eq, Show)
+
+data SettleReturnResult = SettleReturnResult with
+  callCid : ContractId Call
+  assetCid : ContractId Asset
+  casCid : ContractId CollateralAgreementState
+    deriving (Eq, Show)
+
+data SettleSubstitutionResult = SettleSubstitutionResult with
+  callCid : ContractId Call
+  returnAssetCid : ContractId Asset
+  deliveryAssetCid : ContractId Asset
+  casCid : ContractId CollateralAgreementState
+    deriving (Eq, Show)
+
+data SettleDeliveryResult = SettleDeliveryResult with
+  callCid : ContractId Call
+  deliveryAssetCid : ContractId Asset
+  casCid : ContractId CollateralAgreementState
+    deriving (Eq, Show)
+
+template Call
+  with
+    caller       : Party
+    counterparty : Party
+    caId         : Text
+
+    status : CallStatus
+    callSubject : CallSubject
+
+    -- some data from the collateral agreement that's needed here
+    priceRuleId : Text
+    lender      : Party
+    borrower    : Party
+  where
+    signatory caller
+    signatory counterparty
+    signatory lender
+    signatory borrower
+
+    ensure ((caller == lender && counterparty == borrower)
+      || (caller == borrower && counterparty == lender))
+
+    let
+      assetToAssetSpec : (Asset) -> AssetSpec
+      assetToAssetSpec asset =
+        AssetSpec
+          with
+            assetProvider = asset.provider
+            assetSymbol = asset.symbol
+            quantity = asset.quantity
+
+      checkDeliveryInputConsistency : (ContractId Asset) -> (ContractId PriceResult) -> (ContractId EligibilityProof) -> (ContractId CollateralAgreementState) -> Update ()
+      checkDeliveryInputConsistency assetCid prCid eligCid casCid = do
+        a <- fetch assetCid
+        pr <- fetch prCid
+        e <- fetch eligCid
+        cas <- fetch casCid
+
+        -- check everything belongs together
+        assertMsg
+          "Settle failed. Incorrect collateral agreement data supplied"
+          (caId == cas.caId && lender == cas.lender && borrower == cas.borrower)
+        assertMsg
+          "Settle failed. Incorrect asset eligibility proof supplied"
+          (
+          e.caId == caId && e.assetProvider == a.provider && e.assetSymbol == a.symbol
+          && ((lender == e.partyA && borrower == e.partyB)
+            || (borrower == e.partyA && lender == e.partyB)))
+        assertMsg
+          "Settle failed. Incorrect asset price supplied"
+          (pr.assetProvider == a.provider && pr.assetSymbol == a.symbol && pr.ruleId == priceRuleId
+          && ((lender == pr.partyA && borrower == pr.partyB)
+            || (borrower == pr.partyA && lender == pr.partyB)))
+
+      checkPriceAndEligibiltyValidity : (ContractId PriceResult) -> (ContractId PriceRefData) -> (ContractId EligibilityProof) -> [ContractId AssetRefData] -> Update ()
+      checkPriceAndEligibiltyValidity prCid prdCid eligCid ardCids = do
+        pCheckResult <- checkPriceResult counterparty prCid prdCid
+        eCheckResult <- checkEligibilityProof counterparty eligCid ardCids
+
+        assertMsg "Settle failed. Asset Price is no longer valid" pCheckResult
+        assertMsg "Settle failed. Eligibility proof is no longer valid" eCheckResult
+
+      checkCollateralValue : (ContractId Asset) -> (ContractId PriceResult) -> (ContractId EligibilityProof) -> (Decimal) -> Update ()
+      checkCollateralValue assetCid prCid eligCid neededDelivery = do
+        e <- fetch eligCid
+        a <- fetch assetCid
+        p <- fetch prCid
+
+        let collateralValue = p.price * (1.0 - e.applicableHaircut) * (intToDecimal a.quantity)
+        assertMsg
+          ("Allocate Failed. Asset has insufficient collateral value: " <> (show collateralValue)
+            <> " Required: " <> (show neededDelivery))
+          (collateralValue >= neededDelivery)
+
+    controller counterparty can
+      Agree
+        : ContractId Call
+        do
+          assertMsg
+            ("Agree failed." <>
+             "Only Outstanding calls can be agreed.")
+            (status == Outstanding)
+          create this
+            with
+              status = Agreed
+
+      Dispute
+        : ContractId Call
+        do
+          assertMsg "Dispute failed. Only Outstanding calls can be disputed." (status == Outstanding)
+          create this
+            with
+              status = Disputed
+
+      SettleReturn
+        : SettleReturnResult
+        with
+          assetCid : ContractId Asset
+          casCid   : ContractId CollateralAgreementState
+        do
+          assertMsg "Settle failed. Only Agreed calls can be allocated." (status == Agreed)
+          case callSubject of
+            Return assetSpec returnAccountCid -> do
+              asset <- fetch assetCid
+              assertMsg "Cannot settle. Wrong asset supplied." (assetSpec == assetToAssetSpec asset)
+
+              trCid <- do exercise assetCid RequestTransfer with newOwner = caller
+              assetCid <- do exercise trCid Accept with accountCid = returnAccountCid
+
+              callCid <- create this with status = Settled
+              casCid  <- do
+                exercise casCid DeductFromSchedule with assetSpec = assetToSpec asset
+              return SettleReturnResult with callCid; assetCid; casCid
+            Substitution s _ _-> abort "Cannot settle return on a substitution call"
+            Delivery d _ -> abort "Cannot settle return on a delivery call"
+
+      SettleSubstitution
+        : SettleSubstitutionResult
+        with
+          returnAssetCid     : ContractId Asset
+          deliveryAccountCid : ContractId Account
+          casCid             : ContractId CollateralAgreementState
+        do
+          assertMsg "Settle failed. Only Agreed calls can be allocated." (status == Agreed)
+          case callSubject of
+            Return _ _-> abort "Cannot settle substituion on a substitution call"
+            Delivery _ _ -> abort "Cannot settle substituion on a delivery call"
+            Substitution returnAssetSpec returnAccountCid deliveryAssetCid -> do
+              returnAsset <- fetch returnAssetCid
+              assertMsg
+                "Cannot settle. Wrong asset supplied."
+                (returnAssetSpec == assetToAssetSpec returnAsset)
+
+              returnTRCid <- do exercise returnAssetCid RequestTransfer with newOwner = caller
+              returnAssetCid <- do exercise returnTRCid Accept with accountCid = returnAccountCid
+
+              deliveryTRCid <- do
+                exercise deliveryAssetCid RequestTransfer with newOwner = counterparty
+              deliveryAssetCid <- do
+                exercise deliveryTRCid Accept with accountCid = deliveryAccountCid
+
+              callCid <- create this with status = Settled
+              deliveryAsset <- fetch deliveryAssetCid
+              casCid  <- do
+                exercise casCid AddToSchedule with assetSpec = assetToSpec deliveryAsset
+              casCid  <- do
+                exercise casCid DeductFromSchedule with assetSpec = returnAssetSpec
+              return SettleSubstitutionResult with callCid; returnAssetCid; deliveryAssetCid; casCid
+
+      SettleDelivery
+        : SettleDeliveryResult
+        with
+          assetCid   : ContractId Asset
+          prCid      : ContractId PriceResult
+          prdCid     : ContractId PriceRefData
+          eligCid    : ContractId EligibilityProof
+          ardCids    : [ContractId AssetRefData]
+          casCid     : ContractId CollateralAgreementState
+        do
+          assertMsg "Settle failed. Only Agreed calls can be allocated." (status == Agreed)
+          -- Make sure we are in the delivery case
+          case callSubject of
+            Return _ _ -> abort "Settle failed. Cannot settle delivery on return call"
+            Substitution _ _ _ -> abort "Settle failed. Cannot settle delivery on substitution call"
+            Delivery amount deliveryAccountCid -> do
+              -- Check that all the inputs line up
+              checkDeliveryInputConsistency assetCid prCid eligCid casCid
+              -- Check that price and eligibility proofs are still valid
+              checkPriceAndEligibiltyValidity prCid prdCid eligCid ardCids
+              -- Check that the allocated collateral has sufficient value
+              checkCollateralValue assetCid prCid eligCid amount
+
+              deliveryTRCid <- do exercise assetCid RequestTransfer with newOwner = caller
+              deliveryAssetCid <- do exercise deliveryTRCid Accept with accountCid = deliveryAccountCid
+
+              asset <- do                fetch deliveryAssetCid
+              callCid <- create this with status = Settled
+              casCid  <- do
+                exercise casCid AddToSchedule with assetSpec = assetToSpec asset
+              return SettleDeliveryResult with callCid ; deliveryAssetCid; casCid
+
+    controller caller can
+      Call_Archive
+        : ()
+        do
+          assertMsg
+            "Archival failed. Only settled and disputed calls can be archived."
+            (status == Disputed || status == Settled)

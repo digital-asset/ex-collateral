@@ -1,0 +1,192 @@
+-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+daml 1.2
+module CollateralAgreement where
+
+import Asset
+import Account
+import RefData
+import Eligibility
+import Facts
+import CollateralAgreementState
+import Call
+
+{- ------------- Collateral Agreement -------------
+  A collateral agreement
+-}
+template CollateralAgreement
+  with
+    borrower : Party
+    lender   : Party
+    caId     : Text
+    priceRuleId : Text
+    eligibilityCriteria : [EligibilityCriterion]
+  where
+    signatory borrower
+    signatory lender
+
+    let
+      checkEligibility : (Party) -> (Text) -> [ContractId RuleResult] -> [ContractId AssetRefData] -> Update (ContractId EligibilityProof)
+      checkEligibility assetProvider assetSymbol rrCids refDataCids = do
+        assertMsg
+          "Check failed. Incorrect number of RuleResults given."
+          (length rrCids == length eligibilityCriteria)
+        assertMsg
+          "Check failed. Incorrect number of Reference Data given."
+          (length refDataCids == length eligibilityCriteria)
+
+        checkResults <- forA (zip3 rrCids refDataCids eligibilityCriteria)
+          (\t -> do
+              valid <- do exercise t._1 RR_CheckA with refDataCid = t._2
+              ruleResult <- fetch t._1
+              assertMsg
+                ( "Check failed. Rule result for rule " <> ruleResult.ruleId
+                  <> " has incorrect asset issuer or symbol.")
+                (ruleResult.assetProvider == assetProvider
+                && ruleResult.assetSymbol == assetSymbol)
+              assertMsg
+                ("Check failed. RuleResult for rule "
+                <> ruleResult.ruleId <> "Is no longer valid.")
+                valid
+              return (ruleResult, t._3)
+           )
+        let
+          filteredResults = filter
+            (\t -> t._1.result)
+            checkResults
+          refDataIssuers = map
+            (\t -> t._1.refDataIssuer)
+            checkResults
+          refDataVersions = map
+            (\t -> t._1.refDataVersion)
+            checkResults
+          applicableCriteria = map snd filteredResults
+          applicableHaircut = foldl
+            (\(a : Decimal) (e : EligibilityCriterion) -> min a e.haircut)
+            1.0
+            applicableCriteria
+
+        create EligibilityProof
+          with
+            partyA = borrower
+            partyB = lender
+            caId
+            assetProvider
+            assetSymbol
+            refDataIssuers
+            refDataVersions
+            applicableCriteria
+            applicableHaircut
+
+    controller borrower can
+      nonconsuming CheckEligibilityB
+        : ContractId EligibilityProof
+        with
+          assetProvider : Party
+          assetSymbol : Text
+          rrCids      : [ContractId RuleResult]
+          refDataCids : [ContractId AssetRefData]
+        do
+          checkEligibility assetProvider assetSymbol rrCids refDataCids
+
+      nonconsuming CallReturn
+        : ContractId Call
+        with
+          assetSpec : AssetSpec
+          returnAccountCid : ContractId Account
+        do
+          fetch returnAccountCid
+          create Call with
+            caller = borrower
+            counterparty = lender
+            caId
+            status = Outstanding
+            callSubject = Return with assetSpec; returnAccountCid
+            priceRuleId
+            lender
+            borrower
+
+      nonconsuming CallSubstitution
+        : ContractId Call
+        with
+          deliveryAssetCid    : ContractId Asset
+          returnAssetSpec     : AssetSpec
+          returnAccountCid    : ContractId Account
+          eligibilityProofCid : ContractId EligibilityProof
+          assetRefDataCids    : [ContractId AssetRefData]
+        do
+          fetch returnAccountCid
+          e <- fetch eligibilityProofCid
+          a <- fetch deliveryAssetCid
+          assertMsg
+            "Call failed. Incorrect asset eligibility proof supplied"(
+            e.caId == caId && e.assetProvider == a.provider && e.assetSymbol == a.symbol
+            && ((lender == e.partyA && borrower == e.partyB)
+              || (borrower == e.partyA && lender == e.partyB)))
+          eCheckResult <- checkEligibilityProof borrower eligibilityProofCid assetRefDataCids
+          assertMsg "Call failed. Eligibility proof is no longer valid" eCheckResult
+          create Call
+            with
+              caller = borrower
+              counterparty = lender
+              caId
+              status = Outstanding
+              callSubject = Substitution with deliveryAssetCid; returnAccountCid; returnAssetSpec
+              priceRuleId
+              lender
+              borrower
+
+    controller lender can
+      nonconsuming CheckEligibilityL
+        : ContractId EligibilityProof
+        with
+          assetProvider : Party
+          assetSymbol : Text
+          rrCids      : [ContractId RuleResult]
+          refDataCids : [ContractId AssetRefData]
+        do checkEligibility assetProvider assetSymbol rrCids refDataCids
+
+      nonconsuming CallDelivery
+        : ContractId Call
+        with
+          amount : Decimal
+          deliveryAccountCid : ContractId Account
+        do
+          fetch deliveryAccountCid
+          create Call with
+            caller = lender
+            counterparty = borrower
+            caId
+            status = Outstanding
+            callSubject = Delivery with amount; deliveryAccountCid
+            priceRuleId
+            lender
+            borrower
+
+
+{- ------------- Collateral Agreement Proposal -------------
+  A proposal for a collateral agreement
+-}
+template CollateralAgreementProposal
+  with
+    borrower: Party
+    lender: Party
+    ca: CollateralAgreement
+
+  where
+    signatory lender
+
+    controller borrower can
+      CAP_Accept
+        : ( ContractId CollateralAgreement,
+            ContractId CollateralAgreementState)
+        do
+          caCid <- create ca with borrower; lender
+          casCid <- create CollateralAgreementState
+            with borrower; lender; caId = ca.caId; collateralSchedule = []
+          return (caCid, casCid)
+
+      CAP_Reject
+        : ()
+        do return ()

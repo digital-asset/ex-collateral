@@ -1,0 +1,9 @@
+project:
+  scenario: Test.testCalls
+  source: Test.daml
+  parties:
+  - Operator
+  - BankA
+  - BankB
+  - RatingAgency
+  - MarketDataProvider
