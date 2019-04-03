@@ -13,8 +13,6 @@ This example demonstrates how the collateral management process can be modeled i
 
 Special emphasis is put on **composability**, **reference data**, **settling compound transactions atomically**, different **ways of thinking about contracts on the ledger**, and the **maintenance of an operational state**, which allows for easy integration with external systems.
 
-Download this example into a new project called ``collateral`` by running ``da project new example-collateral collateral``.
-
 .. _example-ca-intro:
 
 Introduction to Collateral Management
