@@ -59,14 +59,14 @@ template EligibilityProof
         with refDataCids: [ContractId AssetRefData]
         do
           checkResults <- getAndCheckRefData refDataCids
-          return (all id checkResults)
+          return (all identity checkResults)
 
       EP_ArchiveA
         : ()
         with refDataCids: [ContractId AssetRefData]
         do
           checkResults <- getAndCheckRefData refDataCids
-          assertMsg "Proof is still valid. Can't archive." (not (all id checkResults))
+          assertMsg "Proof is still valid. Can't archive." (not (all identity checkResults))
 
     controller partyB can
       nonconsuming EP_CheckB
@@ -74,14 +74,14 @@ template EligibilityProof
         with refDataCids: [ContractId AssetRefData]
         do
           checkResults <- getAndCheckRefData refDataCids
-          return (all id checkResults)
+          return (all identity checkResults)
 
       EP_ArchiveB
         : ()
         with refDataCids: [ContractId AssetRefData]
         do
           checkResults <- getAndCheckRefData refDataCids
-          assertMsg "Proof is still valid. Can't archive." (not (all id checkResults))
+          assertMsg "Proof is still valid. Can't archive." (not (all identity checkResults))
 
 checkEligibilityProof : (Party) -> (ContractId EligibilityProof) -> [ContractId AssetRefData] -> Update Bool
 checkEligibilityProof party eligibilityProofCid refDataCids = do
