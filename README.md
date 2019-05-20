@@ -164,7 +164,7 @@ Both of these issues are solved by encapsulating the above function in an `AEqui
 
 [See lines 74-89 of daml/Facts.daml](daml/Facts.daml).
 
-The `RuleResult` contract above is determined by the signature of the function `ContractId Asset -> ContractId AssetRefDataCid -> Update Bool` for which it stores the evaluation result. To agree on price, we need a function `ContractId Asset -> ContractId PriceRefDataCid -> Update Decimal` so the rule how to agree on price has to return a `PriceResult` rather than a ``RuleResult``.
+The `RuleResult` contract above is determined by the signature of the function `ContractId Asset -> ContractId AssetRefDataCid -> Update Bool` for which it stores the evaluation result. To agree on price, we need a function `ContractId Asset -> ContractId PriceRefDataCid -> Update Decimal` so the rule how to agree on price has to return a `PriceResult` rather than a `RuleResult`.
 
 > **Note:** For more complex applications, it is possible to implement a single kind of `RefData` contract that stores its payload in a key-value store. Instead of taking a single ref-data contract, the rules (and results) could be adapted to take lists. The type of the result contract for the evaluation of some function on an asset and some reference data then only depends on the return type of the function, which means that only few different types or result have to be dealt with.
 
