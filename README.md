@@ -39,7 +39,7 @@ On-ledger assets are simple *agreements* in which a provider promises an owner t
 
 ### Simple asset holding
 
-![Simple Asset Holding](images/SimpleAssetholding.svg)
+![Simple asset holding](images/SimpleAssetholding.svg)
 
 The terminology used in this example model was chosen to be as descriptive as possible of the workflows involved, and is a mixture of the nomenclatures used in bilateral repo and derivatives trading. The party called *borrower* is the one with an obligation to the *lender* and requests for deliveries, returns, or substitutions of assets are made via a call.
 
@@ -96,25 +96,19 @@ Templates should be kept as independent from each other as possible. DAML does n
 
 ### Asset holding
 
-It is worth looking at the asset holding model presented in [Simple asset holding](#simple-asset-holding] in a few different ways.
+It is worth looking at the asset holding model presented in [Simple asset holding](#simple-asset-holding) in a few different ways.
 
 #### Relational database
 
-Looking at it from the perspective of relational databases, there are two types of entities that need to be stored on the ledger -- accounts and account balances.
+Looking at it from the perspective of relational databases, there are two types of entities that need to be stored on the ledger -- accounts and account balances:
 
 ![Data model for asset holding](images/SimpleAssetHoldingERD.svg)
 
 Primary and foreign key constraints are not enforced automatically in DAML. The uniqueness constraints on primary keys are difficult to realize so it is advisable to build models that do not require them. In this example, duplicate account tokens simply replicate the link between off- and on-ledger accounts and are therefore not a problem. Duplicate balances represent pieces of the overall balance. They are therefore not stored as account balances, but as `Asset` tokens, which can be managed via `Split` and `Merge` choices. The foreign key constraint has to be enforced through choices. Asset holding is set up in such a way that the provider can only issue assets to an existing account and transfers can only be accepted with reference to the target account.
 
-.. include:: ../code/daml/AssetHolding.daml
-   :code: haskell
-   :lines: 34, 38, 42, 44-46
-   :caption: Excerpt of AssetHolding.daml
+[See lines 34, 38, 42, 44-46 of daml/AssetHolding.daml](daml/AssetHolding.daml).
 
-.. include:: ../code/daml/Asset.daml
-   :code: haskell
-   :lines: 62, 71, 75-78
-   :caption: Excerpt of Asset.daml
+[See lines 34, 38, 42, 44-46 62, 71, 75-78 of daml/Asset.daml](daml/Asset.daml).
 
 > **Note:** A malicious provider and owner could extend the DAML model with further contracts that do allow them to create `Asset` contracts without a corresponding account. This would technically break the foreign key constraint that the model is trying to enforce, but both provider and owner have to agree to this explicitly, so there is no danger to other ledger participants.
 
@@ -130,13 +124,13 @@ One more important design choice worth highlighting is how asset transfers work.
 
 > **Note:** There is another reasonable option, which is to do transfers in three steps.
 
-  1. The sender requests a transfer via a non-consuming choice on an asset. The request only contains the value of the asset, not the reference.
-  2. The receiver accepts or declines.
-  3. The sender settles the transfer by supplying the asset contract.
+    1. The sender requests a transfer via a non-consuming choice on an asset. The request only contains the value of the asset, not the reference.
+    2. The receiver accepts or declines.
+    3. The sender settles the transfer by supplying the asset contract.
 
   This scheme still does not fully solve the problem of stale transfers. A sender could initiate multiple transfers from one asset, but not have the assets to settle them all. This is not as bad, as we end up with choices that cannot be executed due to missing inputs rather than failing choices, but it is no silver bullet for the issue described above.
 
-The result of all these considerations is the following data, signatory and workflow schema. Signatories are highlighted in red. The DAML implementation of the below is found in files `Asset.daml` and `Account.daml`.
+The result of all these considerations is the following data, signatory and workflow schema. Signatories are highlighted in red. The DAML implementation of the below is found in files `Asset.daml` and `Account.daml`:
 
 ![Asset holding workflow](images/AssetWorkflow.svg)
 
@@ -146,41 +140,29 @@ Possible workflows in the simple asset holding model. Note that the the issuance
 
 Reference data is represented by simple single-signatory contracts. Anyone can issue such data, so it is up to consumers to agree on which reference data is acceptable. Section [Agreeing on complex facts](#agreeing-on-complex-facts) shows how to reach such agreements. The same considerations as for asset holding apply.
 
-In terms of data, reference data is very simple.
+In terms of data, reference data is very simple:
 
 ![](images/RefData.svg)
 
 All DAML contracts are as private as possible by default, meaning only the issuer can see a piece of reference data. The issuer therefore needs a way to *publish* their contract to other parties. This can either be done by setting an observer or by divulging the contract via choice. The latter has the disadvantage that divulgence is not preserved when the reference data is updated, and parties that can see the contract through divulgence are not considered stakeholders and do not get notified of any changes. The use of observers is therefore preferable in almost all cases and used in this example.
 
-.. literalinclude:: daml/RefData.daml
-  :language: daml
-  :lines: 10-12, 17-20
-  :caption: Excerpt of RefData.daml
+[See lines 10-12, 17-20 of daml/RefData.daml](daml/RefData.daml).
 
 The only possible workflows on reference data are updates and invalidation, which is simply a removal from the ledger. While they are simple choices to implement, they have considerable impact on how the workflows in [Agreeing on complex facts](#agreeing-on-complex-facts) and [Collateral agreements](#collateral-agreements) work. The purpose of reference data is for other parties to come to agreement on some facts. If the reference data issuer updates the value, any agreements based upon the old value should be voided or otherwise indicate that they are based on an outdated reference data contract. Any attempted use of such agreements should fail gracefully. One way to stop use of outdated agreements is to reference the `ContractId` of the reference data used. However, DAML has no try-catch blocks, so the transaction will fail when `fetch` is called on the reference data. It would be difficult to distinguish outdated from otherwise invalid agreements and impossible to fail gracefully. A better solution, showcased in this example, is to version reference data. [Agreeing on complex facts](#agreeing-on-complex-facts) explains how this allows for graceful failure or helpful error messages.
 
-.. literalinclude:: daml/RefData.daml
-  :language: daml
-  :lines: 10, 18, 22-29
-  :caption: Excerpt of RefData.daml
+[See lines 10, 18, 22-29 of daml/RefData.daml](daml/RefData.daml).
 
 ### Agreeing on complex facts
 
 Based on published reference data, agreeing on facts like asset classification and rating is easy in principle as it boils down to a reference to the provider and value of the respective reference data contract. An eligibility rule like "The asset is a Equity with rating at least A by 'RatingAgency'", can be expressed in a function `ContractId Asset -> ContractId AssetRefDataCid -> Update Bool`:
 
-.. literalinclude:: daml/Eligibility.daml
-  :language: daml
-  :lines: 93-107
-  :caption: function aEquity
+[See lines 93-107 of daml/Eligibility.daml](daml/Eligibility.daml).
 
 Functions are not valid field types for templates. To store the above function as an eligibility criterion on a collateral agreement contract, it would be necessary to make it part of the template, thereby destroying the generic nature of the agreement. Every possible eligibility schedule would require its own template. It is also not possible to evaluate functions specified in the DAML model outside of transactions. Maintaining a state table of agreed facts like asset eligibilities would require reimplementation of logic off-ledger, which is highly undesirable.
 
 Both of these issues are solved by encapsulating the above function in an `AEquityRule` template that evaluates it and stores the evaluation arguments and result in a `RuleResult`. This provides a relatively uniform output. Many different `Rule` templates can all generate `RuleResult` contracts as output that allows their consumption by the collateral agreement without fixing what kind of rule was applied. It is also possible to keep an overview of all currently agreed or agreeable facts by making sure there is a valid `RuleResult` contract for each `Rule` on the ledger.
 
-.. literalinclude:: daml/Facts.daml
-  :language: daml
-  :lines: 74-89
-  :caption: Excerpt of Facts.daml
+[See lines 74-89 of daml/Facts.daml](daml/Facts.daml).
 
 The `RuleResult` contract above is determined by the signature of the function `ContractId Asset -> ContractId AssetRefDataCid -> Update Bool` for which it stores the evaluation result. To agree on price, we need a function `ContractId Asset -> ContractId PriceRefDataCid -> Update Decimal` so the rule how to agree on price has to return a `PriceResult` rather than a ``RuleResult``.
 
@@ -196,10 +178,7 @@ The contracts perspective does not add much to the considerations. The rules and
 
 The key issue with the workflow was already touched upon in [Reference data](#reference-data). Parties to a fact need to be able to check its ongoing validity. Since reference data is versioned, this is accomplished by providing the most up-to-date reference data to the result and checking whether the version has changed.
 
-.. literalinclude:: daml/Facts.daml
-  :language: daml
-  :lines: 9, 22-40
-  :caption: Excerpt of Facts.daml
+[See lines 9, 22-40 of daml/Facts.daml](daml/Facts.daml).
 
 > **Note:** There is no provision for rules to be changed or archived, so the ongoing existence of a rule does not need to be checked in the `Check` choice of the results.
 
@@ -211,12 +190,8 @@ For the purpose of this example, three rules are provided:
 - `AEquityRule`
 
   A rule to check that an asset is an equity with rating >=A. It is easy to see how the :ref:`example-ca-function-aEquity` is encapsulated in the template `AEquityRule`.
-
-  .. literalinclude:: daml/Rules.daml
-    :language: daml
-    :lines: 165-202
-    :caption: Excerpt of Rules.daml
-
+  
+  [See lines 165-202 of daml/Rules.daml](daml/Rules.daml).
 - `RefDataPriceRule`
 
   A rule to establish a price based on a given provider's reference data.
@@ -227,34 +202,19 @@ For the purpose of this example, three rules are provided:
 
 With rules and facts modeled as they are, the collateral agreement pictured in [Sample collateral agreement](#sample-collateral-agreement) is easy to model by referencing a `ruleId` for a pricing agreement and a `ruleId` together with a haircut for each eligibility criterion.
 
-.. literalinclude:: daml/Eligibility.daml
-  :language: daml
-  :lines: 7-10
-  :caption: Excerpt of Eligibility.daml
+[See lines 7-10 of daml/Eligibility.daml](daml/Eligibility.daml).
 
-.. literalinclude:: daml/CollateralAgreement.daml
-  :language: daml
-  :lines: 15-24
-  :caption: Excerpt of CollateralAgreement.daml
+[See lines 15-24 of daml/CollateralAgreement.daml](daml/CollateralAgreement.daml).
 
 The eligibility of an asset under a collateral agreement is agreed bilaterally through a process similar to that for rule or price results. It is modeled the same way. Instead of a `Rule` generating a `RuleResult`, the collateral agreement itself generates an `EligibilityProof`, taking the `RuleResult` and `AssetRefData` contracts for each `EligibilityCriterion` as inputs. The `EligibilityProof` contracts keep track of which eligibility criteria are applicable to which assets and the effective haircut for each asset. As with the rules, this model allows a participant to keep all the information about eligibility on-ledger in a uniform way. In this example, if multiple criteria are applicable, the minimum haircut is applicable.
 
-.. literalinclude:: daml/CollateralAgreement.daml
-  :language: daml
-  :lines: 79-88
-  :caption: The CheckEligibilityB choice
+[See lines 79-88 of daml/CollateralAgreement.daml](daml/CollateralAgreement.daml).
 
-.. literalinclude:: daml/Eligibility.daml
-  :language: daml
-  :lines: 17-34
-  :caption: Excerpt of Eligibility.daml
+[See lines 17-34 of daml/Eligibility.daml](daml/Eligibility.daml).
 
-The data model and workflow of the process shown in [Margin call](#margin-call) need some thought. Recall that there are three types of call -- Delivery, Return, and Substitution -- and four states of a call -- Outstanding, Disputed, Agreed, and Settled. The possible actions on each of the 12 possible type / state combinations might be different, but creating 12 contract templates would make maintenance of the model expensive and it would be more difficult to get an overview of all calls. This example therefore only implements one `Call` template which keeps track of both type and state, checking for transition validity in the choices.
+The data model and workflow of the process shown in [Margin call](#margin-call) need some thought. Recall that there are three types of call - Delivery, Return, and Substitution - and four states of a call - Outstanding, Disputed, Agreed, and Settled. The possible actions on each of the 12 possible type / state combinations might be different, but creating 12 contract templates would make maintenance of the model expensive and it would be more difficult to get an overview of all calls. This example therefore only implements one `Call` template which keeps track of both type and state, checking for transition validity in the choices.
 
-.. literalinclude:: daml/Call.daml
-  :language: daml
-  :lines: 11-25, 45, 119-129
-  :caption: Excerpt of Call.daml
+[See lines 11-25, 45, 119-129 of daml/Call.daml](daml/call.daml).
 
 Calls are made through non-consuming choices on the collateral agreement contract and then advanced from state to state through choices on the call itself. The eligibility check is performed when the request for a substitution is made or upon settlement for deliveries.
 
@@ -268,30 +228,20 @@ The collateral schedule, which keeps track of the pledged or transferred collate
 
 ### Onboarding
 
-.. literalinclude:: daml/Test.daml
-  :language: daml
-  :lines: 24-26,30,32-34,39-44
+[See lines 24-26,30,32-34,39-44 of daml/Test.daml](daml/Test.daml).
 
 ### Publishing of reference data
 
-.. literalinclude:: daml/Test.daml
-  :language: daml
-  :lines: 53-62
+[See lines 53-62 of daml/Test.daml](daml/Test.daml).
 
 ### Creation of a collateral agreement
 
-.. literalinclude:: daml/Test.daml
-  :language: daml
-  :lines: 117-133, 142-143
+[See lines 117-133, 142-143 of daml/Test.daml](daml/Test.daml).
 
 ### Evaluation of rules and eligibility
 
-.. literalinclude:: daml/Test.daml
-  :language: daml
-  :lines: 163-169
+[See lines 163-169 of daml/Test.daml](daml/Test.daml).
 
 ### Margin calls and call processing
 
-.. literalinclude:: daml/Test.daml
-  :language: daml
-  :lines: 146-148, 151-152, 176-184
+[See lines 146-148, 151-152, 176-184 of daml/Test.daml](daml/Test.daml).
