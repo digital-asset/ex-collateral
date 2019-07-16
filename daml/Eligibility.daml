@@ -37,6 +37,7 @@ template EligibilityProof
     signatory partyB
 
     let
+      id a = a
       getAndCheckRefData : [ContractId AssetRefData] -> Update [Bool]
       getAndCheckRefData refDataCids = do
         assertMsg
