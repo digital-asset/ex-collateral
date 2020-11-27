@@ -225,23 +225,3 @@ The collateral schedule, which keeps track of the pledged or transferred collate
 ## Sample workflow
 
 `Test.daml` includes a script for a complete workflow using the templates created in this example.
-
-### Onboarding
-
-[See lines 24-26,30,32-34,39-44 of daml/Test.daml](daml/Test.daml).
-
-### Publishing of reference data
-
-[See lines 53-62 of daml/Test.daml](daml/Test.daml).
-
-### Creation of a collateral agreement
-
-[See lines 117-133, 142-143 of daml/Test.daml](daml/Test.daml).
-
-### Evaluation of rules and eligibility
-
-[See lines 163-169 of daml/Test.daml](daml/Test.daml).
-
-### Margin calls and call processing
-
-[See lines 146-148, 151-152, 176-184 of daml/Test.daml](daml/Test.daml).
