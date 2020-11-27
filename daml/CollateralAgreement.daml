@@ -27,8 +27,7 @@ template CollateralAgreement
     signatory lender
 
     let
-      checkEligibility : (Party) -> (Text) -> [ContractId RuleResult] -> [ContractId AssetRefData] -> Update (ContractId EligibilityProof)
-      checkEligibility assetProvider assetSymbol rrCids refDataCids = do
+      checkEligibility (assetProvider : Party) (assetSymbol : Text) (rrCids : [ContractId RuleResult]) (refDataCids : [ContractId AssetRefData]) : Update (ContractId EligibilityProof) = do
         assertMsg
           "Check failed. Incorrect number of RuleResults given."
           (length rrCids == length eligibilityCriteria)

@@ -37,8 +37,7 @@ template EligibilityProof
     signatory partyB
 
     let
-      getAndCheckRefData : [ContractId AssetRefData] -> Update [Bool]
-      getAndCheckRefData refDataCids = do
+      getAndCheckRefData (refDataCids  : [ContractId AssetRefData]) : Update [Bool] = do
         assertMsg
           "Check failed. Incorrect number of AssetRefData contracts."
           (length refDataCids == length refDataIssuers)

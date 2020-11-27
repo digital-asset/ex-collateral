@@ -76,8 +76,7 @@ template Call
             assetSymbol = asset.symbol
             quantity = asset.quantity
 
-      checkDeliveryInputConsistency : (ContractId Asset) -> (ContractId PriceResult) -> (ContractId EligibilityProof) -> (ContractId CollateralAgreementState) -> Update ()
-      checkDeliveryInputConsistency assetCid prCid eligCid casCid = do
+      checkDeliveryInputConsistency (assetCid : ContractId Asset) (prCid : ContractId PriceResult) (eligCid : ContractId EligibilityProof) (casCid : ContractId CollateralAgreementState) : Update () = do
         a <- fetch assetCid
         pr <- fetch prCid
         e <- fetch eligCid
