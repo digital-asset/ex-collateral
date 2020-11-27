@@ -1,8 +1,8 @@
--- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
-
-daml 1.2
 module Test where
+
+import Daml.Script
 
 import DA.List
 
@@ -18,35 +18,35 @@ import CollateralAgreement
 -- test:
 testCalls = do
   -- Set up parties
-  operator <- getParty "Operator"
-  bankA <- getParty "BankA"
-  bankB <- getParty "BankB"
-  ratingAgency <- getParty "RatingAgency"
-  marketDataProvider <- getParty "MarketDataProvider"
+  operator <- allocateParty "Operator"
+  bankA <- allocateParty "BankA"
+  bankB <- allocateParty "BankB"
+  ratingAgency <- allocateParty "RatingAgency"
+  marketDataProvider <- allocateParty "MarketDataProvider"
   -- Onboard Banks A and B and issue accounts and assets
   bankAInv <- submit operator do
-    create AssetOwnerInvitation
+    createCmd AssetOwnerInvitation
       with provider = operator; owner = bankA
   bankBInv <- submit operator do
-    create AssetOwnerInvitation
+    createCmd AssetOwnerInvitation
       with provider = operator; owner = bankB
-  bankAOwn <- submit bankA do exercise bankAInv AOI_Accept
-  bankBOwn <- submit bankB do exercise bankBInv AOI_Accept
+  bankAOwn <- submit bankA do exerciseCmd bankAInv AOI_Accept
+  bankBOwn <- submit bankB do exerciseCmd bankBInv AOI_Accept
   bankAAcc <- submit operator do
-    exercise bankAOwn IssueAccount
+    exerciseCmd bankAOwn IssueAccount
       with accountId = "BankA"
   bankBAcc <- submit operator do
-    exercise bankBOwn IssueAccount
+    exerciseCmd bankBOwn IssueAccount
       with accountId = "BankB"
 
   bankABonds <- submit operator do
-    exercise bankAOwn IssueAsset
+    exerciseCmd bankAOwn IssueAsset
       with
         accountCid = bankAAcc
         symbol     = "Bond"
         quantity   = 100
   bankAEquities <- submit operator do
-    exercise bankAOwn IssueAsset
+    exerciseCmd bankAOwn IssueAsset
       with
         accountCid = bankAAcc
         symbol = "Equity"
@@ -54,7 +54,7 @@ testCalls = do
 
   -- Ref data providers issues some ref data
   bondRefData <- submit ratingAgency do
-    create AssetRefData
+    createCmd AssetRefData
       with
         issuer        = ratingAgency
         assetProvider = operator
@@ -65,7 +65,7 @@ testCalls = do
         obs           = bankA
 
   equitiesRefData <- submit ratingAgency do
-    create AssetRefData
+    createCmd AssetRefData
       with
         issuer        = ratingAgency
         assetProvider = operator
@@ -76,7 +76,7 @@ testCalls = do
         obs           = bankA
 
   bondPrice <- submit marketDataProvider do
-    create PriceRefData
+    createCmd PriceRefData
       with
         issuer        = marketDataProvider
         assetProvider = operator
@@ -86,7 +86,7 @@ testCalls = do
         obs           = bankA
 
   equitiesPrice <- submit marketDataProvider do
-    create PriceRefData
+    createCmd PriceRefData
       with
         issuer        = marketDataProvider
         assetProvider = operator
@@ -97,28 +97,28 @@ testCalls = do
 
   -- BankB proposes rules and a collateral agreement based on those rules
   bondRuleProposal <- submit bankB do
-    create AAABondRuleProposal
+    createCmd AAABondRuleProposal
       with
         partyA = bankA
         partyB = bankB
         ruleId = "AAABonds"
         refDataIssuer = ratingAgency
   equitiesRuleProposal <- submit bankB do
-    create AEquityRuleProposal
+    createCmd AEquityRuleProposal
       with
         partyA = bankA
         partyB = bankB
         ruleId = "AEquities"
         refDataIssuer = ratingAgency
   priceRuleProposal <- submit bankB do
-    create RefDataPriceRuleProposal
+    createCmd RefDataPriceRuleProposal
       with
         partyA = bankA
         partyB = bankB
         ruleId = "Price"
         refDataIssuer = marketDataProvider
   caProposal <- submit bankB do
-    create CollateralAgreementProposal
+    createCmd CollateralAgreementProposal
       with
         borrower = bankA
         lender = bankB
@@ -137,34 +137,34 @@ testCalls = do
 
   -- Bank A accepts
   bondRule <- submit bankA do
-    exercise bondRuleProposal AAABRP_Accept
+    exerciseCmd bondRuleProposal AAABRP_Accept
   equitiesRule <- submit bankA do
-    exercise equitiesRuleProposal AERP_Accept
+    exerciseCmd equitiesRuleProposal AERP_Accept
   priceRule <- submit bankA do
-    exercise priceRuleProposal RDPRP_Accept
+    exerciseCmd priceRuleProposal RDPRP_Accept
   caAndState <- submit bankA do
-    exercise caProposal CAP_Accept
+    exerciseCmd caProposal CAP_Accept
 
   -- Bank B calls for 500.0 margin to their account
   deliveryCall <- submit bankB do
-    exercise caAndState._1 CallDelivery
+    exerciseCmd caAndState._1 CallDelivery
       with amount = 500.0; deliveryAccountCid = bankBAcc
 
   -- Bank A agrees and prepares 50 bonds
   deliveryCall <- submit bankA do
-    exercise deliveryCall Agree
+    exerciseCmd deliveryCall Agree
   bondSplitResult <- submit bankA do
-    exercise bankABonds Split with splitQuantity = 50
+    exerciseCmd bankABonds Split with splitQuantity = 50
 
   -- Bank A now evaluates the rules and checks eligibility
   bondRuleResult <- submit bankA do
-    exercise bondRule AAABR_EvaluateA
+    exerciseCmd bondRule AAABR_EvaluateA
       with refDataCid = bondRefData
   equitiesRuleResult <- submit bankA do
-    exercise equitiesRule AER_EvaluateA
+    exerciseCmd equitiesRule AER_EvaluateA
       with refDataCid = bondRefData
   eligibilityProof <- submit bankA do
-    exercise caAndState._1 CheckEligibilityB
+    exerciseCmd caAndState._1 CheckEligibilityB
       with
         assetProvider = operator
         assetSymbol   = "Bond"
@@ -173,11 +173,11 @@ testCalls = do
 
   -- With an eligibility proof in hand, Bank A checks their price and pledges the bonds.
   bondPriceResult <- submit bankA do
-    exercise priceRule RDPR_EvaluateA
+    exerciseCmd priceRule RDPR_EvaluateA
       with refDataCid = bondPrice
 
   settleResult <- submit bankA do
-    exercise deliveryCall SettleDelivery
+    exerciseCmd deliveryCall SettleDelivery
       with
         assetCid = bondSplitResult._1
         prCid    = bondPriceResult
@@ -187,60 +187,68 @@ testCalls = do
         casCid   = caAndState._2
 
   -- Check that Bank B has received the bonds and the agreement state has registered them.
-  submit bankB do
-    bonds <- fetch settleResult.deliveryAssetCid
-    cas <- fetch settleResult.casCid
-    assert (bonds.owner == bankB && bonds.quantity == 50
+  Some bonds <- queryContractId bankB settleResult.deliveryAssetCid
+  Some cas <- queryContractId bankB settleResult.casCid
+  assert (bonds.owner == bankB && bonds.quantity == 50
       && bonds.symbol == "Bond" && bonds.accountId == "BankB")
-    assert (length cas.collateralSchedule == 1)
-    let collateral = head cas.collateralSchedule
-    assert(collateral.assetSymbol == "Bond" && collateral.quantity == 50)
+  assert (length cas.collateralSchedule == 1)
+  let collateral = head cas.collateralSchedule
+  assert(collateral.assetSymbol == "Bond" && collateral.quantity == 50)
 
   -- Now the Rating Agency downgrades the bonds to AA rating.
   bondRefData <- submit ratingAgency do
-    exercise bondRefData SetAssetRefData
+    exerciseCmd bondRefData SetAssetRefData
       with newRating = AA; newType = Bond
 
   -- The rule result and eligibility proof are no longer valid and a new eligibility proof
   -- shows that bonds are no longer worth anything (haircut = 1.0)
-  submit bankA do
-    bondRuleCheckResult <- exercise bondRuleResult RR_CheckA
+  bondRuleCheckResult <- submit bankA do
+    exerciseCmd bondRuleResult RR_CheckA with 
+      refDataCid = bondRefData
+  equitiesRuleCheckResult <- submit bankA do
+    exerciseCmd equitiesRuleResult RR_CheckA
       with refDataCid = bondRefData
-    equitiesRuleCheckResult <- exercise equitiesRuleResult RR_CheckA
-      with refDataCid = bondRefData
-    eligCheckResult <- exercise eligibilityProof EP_CheckA
+  eligCheckResult <- submit bankA do
+    exerciseCmd eligibilityProof EP_CheckA
       with refDataCids = [bondRefData, bondRefData]
-    assert (not (bondRuleCheckResult || equitiesRuleCheckResult || eligCheckResult))
-    exercise bondRuleResult RR_ArchiveA with refDataCid = bondRefData
-    exercise equitiesRuleResult RR_ArchiveA with refDataCid = bondRefData
-    exercise eligibilityProof EP_ArchiveA with refDataCids = [bondRefData, bondRefData]
+  assert (not (bondRuleCheckResult || equitiesRuleCheckResult || eligCheckResult))
+  
+  submit bankA do
+    exerciseCmd bondRuleResult RR_ArchiveA with refDataCid = bondRefData
+  submit bankA do
+    exerciseCmd equitiesRuleResult RR_ArchiveA with refDataCid = bondRefData
+  submit bankA do
+    exerciseCmd eligibilityProof EP_ArchiveA with refDataCids = [bondRefData, bondRefData]
 
-    bondRuleResult <- exercise bondRule AAABR_EvaluateA with refDataCid = bondRefData
-    equitiesRuleResult <- exercise equitiesRule AER_EvaluateA with refDataCid = bondRefData
-    bondEligibilityProof <- exercise caAndState._1 CheckEligibilityB
-        with
-          assetProvider = operator
-          assetSymbol  = "Bond"
-          rrCids       = [bondRuleResult, equitiesRuleResult]
-          refDataCids  = [bondRefData, bondRefData]
-    e <- fetch bondEligibilityProof
-    assert(e.applicableCriteria == [] )
-    assert(e.applicableHaircut == 1.0)
+  bondRuleResult <- submit bankA do
+    exerciseCmd bondRule AAABR_EvaluateA with refDataCid = bondRefData
+  equitiesRuleResult <- submit bankA do
+    exerciseCmd equitiesRule AER_EvaluateA with refDataCid = bondRefData
+  bondEligibilityProof <- submit bankA do
+    exerciseCmd caAndState._1 CheckEligibilityB
+      with
+        assetProvider = operator
+        assetSymbol  = "Bond"
+        rrCids       = [bondRuleResult, equitiesRuleResult]
+        refDataCids  = [bondRefData, bondRefData]
+  Some e <- queryContractId bankA bondEligibilityProof
+  assert(e.applicableCriteria == [] )
+  assert(e.applicableHaircut == 1.0)
 
   -- Bank A decides to substitute the bonds for equities.
-  bondRuleResult     <- submit bankA do exercise bondRule AAABR_EvaluateA with refDataCid = equitiesRefData
-  equitiesRuleResult <- submit bankA do exercise equitiesRule AER_EvaluateA with refDataCid = equitiesRefData
+  bondRuleResult     <- submit bankA do exerciseCmd bondRule AAABR_EvaluateA with refDataCid = equitiesRefData
+  equitiesRuleResult <- submit bankA do exerciseCmd equitiesRule AER_EvaluateA with refDataCid = equitiesRefData
   eligibilityProof   <- submit bankA do
-    exercise caAndState._1 CheckEligibilityB
+    exerciseCmd caAndState._1 CheckEligibilityB
       with
         assetProvider = operator
         assetSymbol   = "Equity"
         rrCids        = [bondRuleResult, equitiesRuleResult]
         refDataCids   = [equitiesRefData, equitiesRefData]
-  equitiesPriceResult <- submit bankA do exercise priceRule RDPR_EvaluateA with refDataCid = equitiesPrice
-  equitiesSplitResult <- submit bankA do exercise bankAEquities Split with splitQuantity = 50
+  equitiesPriceResult <- submit bankA do exerciseCmd priceRule RDPR_EvaluateA with refDataCid = equitiesPrice
+  equitiesSplitResult <- submit bankA do exerciseCmd bankAEquities Split with splitQuantity = 50
   substitutionCall <- submit bankA do
-    exercise caAndState._1 CallSubstitution
+    exerciseCmd caAndState._1 CallSubstitution
       with
         deliveryAssetCid = equitiesSplitResult._1
         returnAssetSpec = AssetSpec with assetProvider = operator; assetSymbol = "Bond"; quantity = 50
@@ -249,27 +257,25 @@ testCalls = do
         assetRefDataCids = [equitiesRefData, equitiesRefData]
 
   -- Bank B agrees and returns the bonds.
-  substitutionCall <- submit bankB do exercise substitutionCall Agree
+  substitutionCall <- submit bankB do exerciseCmd substitutionCall Agree
   substitutionResult <- submit bankB do
-    exercise substitutionCall SettleSubstitution
+    exerciseCmd substitutionCall SettleSubstitution
       with
         returnAssetCid     = settleResult.deliveryAssetCid
         deliveryAccountCid = bankBAcc
         casCid             = settleResult.casCid
 
   -- Check that the assets have been exchanged successfully and the schedule is up to date.
-  submit bankB do
-    equities <- fetch substitutionResult.deliveryAssetCid
-    cas      <- fetch substitutionResult.casCid
-    assert (equities.owner == bankB && equities.quantity == 50
-      && equities.symbol == "Equity" && equities.accountId == "BankB")
-    assert (length cas.collateralSchedule == 1)
-    let collateral = head cas.collateralSchedule
-    assert(collateral.assetSymbol == "Equity" && collateral.quantity == 50)
+  Some equities <- queryContractId bankB substitutionResult.deliveryAssetCid
+  Some cas <- queryContractId bankB substitutionResult.casCid
+  assert (equities.owner == bankB && equities.quantity == 50
+    && equities.symbol == "Equity" && equities.accountId == "BankB")
+  assert (length cas.collateralSchedule == 1)
+  let collateral = head cas.collateralSchedule
+  assert(collateral.assetSymbol == "Equity" && collateral.quantity == 50)
 
-  submit bankA do
-    bonds    <- fetch substitutionResult.returnAssetCid
-    assert (bonds.owner == bankA && bonds.quantity == 50
-      && bonds.symbol == "Bond" && bonds.accountId == "BankA")
+  Some bonds <- queryContractId bankA substitutionResult.returnAssetCid
+  assert (bonds.owner == bankA && bonds.quantity == 50
+    && bonds.symbol == "Bond" && bonds.accountId == "BankA")
 
   assert (True)

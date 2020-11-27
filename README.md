@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.-->
+<!-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.-->
 <!-- SPDX-License-Identifier: Apache-2.0-->
 
 # DAML Example: Collateral Management
@@ -8,7 +8,7 @@ This example demonstrates how the collateral management process can be modeled i
 - [Introduction to collateral management](#introduction-to-collateral-management) provides background on a few functions of the complex topic of collateral management
 - [A simple model](#a-simple-model) delineates which parts of the processes are modeled
 - [DAML implementation](#daml-implementation) explains the key design decisions behind the DAML model
-- [Sample workflow](#sample-workflow) gives a brief overview of the included test scenario
+- [Sample workflow](#sample-workflow) gives a brief overview of the included test script
 
 Special emphasis is put on **composability**, **reference data**, **settling compound transactions atomically**, different **ways of thinking about contracts on the ledger**, and the **maintenance of an operational state**, which allows for easy integration with external systems.
 
@@ -224,24 +224,4 @@ The collateral schedule, which keeps track of the pledged or transferred collate
 
 ## Sample workflow
 
-`Test.daml` includes a scenario for a complete workflow using the templates created in this example.
-
-### Onboarding
-
-[See lines 24-26,30,32-34,39-44 of daml/Test.daml](daml/Test.daml).
-
-### Publishing of reference data
-
-[See lines 53-62 of daml/Test.daml](daml/Test.daml).
-
-### Creation of a collateral agreement
-
-[See lines 117-133, 142-143 of daml/Test.daml](daml/Test.daml).
-
-### Evaluation of rules and eligibility
-
-[See lines 163-169 of daml/Test.daml](daml/Test.daml).
-
-### Margin calls and call processing
-
-[See lines 146-148, 151-152, 176-184 of daml/Test.daml](daml/Test.daml).
+`Test.daml` includes a script for a complete workflow using the templates created in this example.

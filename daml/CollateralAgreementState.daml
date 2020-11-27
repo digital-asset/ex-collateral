@@ -1,4 +1,4 @@
--- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
 daml 1.2
@@ -23,8 +23,7 @@ template CollateralAgreementState
     signatory lender
 
     let
-      addToSchedule : [AssetSpec] -> (AssetSpec) -> Update [AssetSpec]
-      addToSchedule oldSchedule assetSpec = do
+      addToSchedule (oldSchedule : [AssetSpec]) (assetSpec : AssetSpec) : Update [AssetSpec] = do
         let
           mIdx = findIndex (\   (a: AssetSpec) ->
             a.assetProvider == assetSpec.assetProvider

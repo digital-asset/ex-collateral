@@ -1,4 +1,4 @@
--- Copyright (c) 2019, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- Copyright (c) 2020, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
 daml 1.2
@@ -27,8 +27,7 @@ template PriceResult
     signatory partyB
 
     let
-      getAndCheckPriceRefData : (ContractId PriceRefData) -> Update Bool
-      getAndCheckPriceRefData refDataCid = do
+      getAndCheckPriceRefData (refDataCid : ContractId PriceRefData) : Update Bool = do
         refData <- fetch refDataCid
         assertMsg "Reference data does not match result."
           (  refData.issuer == refDataIssuer
@@ -92,8 +91,7 @@ template RuleResult
     signatory partyB
 
     let
-      getAndCheckAssetRefData : (ContractId AssetRefData) -> Update Bool
-      getAndCheckAssetRefData refDataCid = do
+      getAndCheckAssetRefData (refDataCid : ContractId AssetRefData) : Update Bool = do
         refData <- fetch refDataCid
         assertMsg  "Reference data does not match result."
           (  refData.issuer == refDataIssuer

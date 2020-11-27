@@ -1,8 +1,7 @@
-sdk-version: 0.13.12
+sdk-version: 1.7.0
 name: ex-collateral
 version: 1.0.0
 source: daml/Test.daml
-scenario: Test:testCalls
 parties:
 - Operator
 - BankA
@@ -14,3 +13,4 @@ exposed-modules:
 dependencies:
 - daml-prim
 - daml-stdlib
+- daml-script
