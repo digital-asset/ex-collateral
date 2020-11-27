@@ -8,7 +8,7 @@ This example demonstrates how the collateral management process can be modeled i
 - [Introduction to collateral management](#introduction-to-collateral-management) provides background on a few functions of the complex topic of collateral management
 - [A simple model](#a-simple-model) delineates which parts of the processes are modeled
 - [DAML implementation](#daml-implementation) explains the key design decisions behind the DAML model
-- [Sample workflow](#sample-workflow) gives a brief overview of the included test scenario
+- [Sample workflow](#sample-workflow) gives a brief overview of the included test script
 
 Special emphasis is put on **composability**, **reference data**, **settling compound transactions atomically**, different **ways of thinking about contracts on the ledger**, and the **maintenance of an operational state**, which allows for easy integration with external systems.
 
@@ -224,7 +224,7 @@ The collateral schedule, which keeps track of the pledged or transferred collate
 
 ## Sample workflow
 
-`Test.daml` includes a scenario for a complete workflow using the templates created in this example.
+`Test.daml` includes a script for a complete workflow using the templates created in this example.
 
 ### Onboarding
 
